@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: atsense-ai
+    runtime: node
+    plan: free
+    region: oregon # or your preferred region
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    # Set these environment variables in the Render Dashboard.
+    # Sensitive values (API keys/secrets) are intentionally NOT committed here;
+    # use `sync: false` so they are entered manually and stored as Render secrets.
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        value: https://atsense-ai-zlkc.onrender.com
+      - key: PORT
+        value: 10000
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: TOP_K
+        value: '5'
+      - key: GROQ_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false

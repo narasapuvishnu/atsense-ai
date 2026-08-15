@@ -1,6 +1,8 @@
 import './env';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { existsSync } from 'fs';
 import { resumeRouter } from './routes/resume.routes';
 import { jobDescriptionRouter } from './routes/jobDescription.routes';
 import { analysisRouter } from './routes/analysis.routes';
@@ -31,6 +33,30 @@ app.use('/api/health', healthRouter);
 app.use('/api/resume', resumeRouter);
 app.use('/api/job-description', jobDescriptionRouter);
 app.use('/api/analysis', analysisRouter);
+
+// ── Serve the built React frontend (client/dist) ────────────────────────────
+// Resolved relative to this file so it works regardless of the current working
+// directory (ts-node dev runs from server/src, production runs from
+// server/dist — both resolve ../../client/dist to the repo's client folder).
+const CLIENT_DIST_PATH = path.resolve(__dirname, '../../client/dist');
+const clientIndexFile = path.join(CLIENT_DIST_PATH, 'index.html');
+
+app.use(express.static(CLIENT_DIST_PATH));
+
+// SPA fallback: every non-/api GET (e.g. React Router paths like /analyzer)
+// returns index.html so client-side routing works. Unmatched /api/* requests
+// still fall through to the JSON 404 handler below, keeping the API contract.
+app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+  if (existsSync(clientIndexFile)) {
+    res.sendFile(clientIndexFile);
+  } else {
+    res.status(404).json({
+      success: false,
+      error: 'Frontend build not found.',
+      message: 'client/dist/index.html does not exist. Run the client build first.',
+    });
+  }
+});
 
 // 404 handler
 app.use((_req, res) => {
