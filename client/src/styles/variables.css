@@ -1,0 +1,95 @@
+/* ============================================================
+   ATSense Design System — CSS Custom Properties
+   ============================================================ */
+
+:root {
+  /* --- Brand Colors --- */
+  --at-bg-primary:        #080d1a;
+  --at-bg-secondary:      #0d1526;
+  --at-bg-card:           #111827;
+  --at-bg-card-hover:     #1a2236;
+  --at-bg-elevated:       #151e30;
+  --at-bg-glass:          rgba(17, 24, 39, 0.75);
+
+  --at-border:            rgba(99, 102, 241, 0.18);
+  --at-border-subtle:     rgba(255, 255, 255, 0.06);
+  --at-border-hover:      rgba(99, 102, 241, 0.45);
+
+  /* --- Accent Palette --- */
+  --at-indigo:            #6366f1;
+  --at-indigo-light:      #818cf8;
+  --at-indigo-dark:       #4338ca;
+  --at-purple:            #a855f7;
+  --at-purple-light:      #c084fc;
+  --at-cyan:              #22d3ee;
+  --at-cyan-light:        #67e8f9;
+  --at-blue:              #3b82f6;
+  --at-blue-light:        #60a5fa;
+
+  /* --- Semantic Colors --- */
+  --at-success:           #22c55e;
+  --at-success-light:     #4ade80;
+  --at-success-bg:        rgba(34, 197, 94, 0.10);
+  --at-warning:           #f59e0b;
+  --at-warning-light:     #fbbf24;
+  --at-warning-bg:        rgba(245, 158, 11, 0.10);
+  --at-danger:            #ef4444;
+  --at-danger-light:      #f87171;
+  --at-danger-bg:         rgba(239, 68, 68, 0.10);
+  --at-info:              #06b6d4;
+  --at-info-bg:           rgba(6, 182, 212, 0.10);
+
+  /* --- Score Colors --- */
+  --at-score-exceptional: #00ff88;
+  --at-score-strong:      #4ade80;
+  --at-score-good:        #86efac;
+  --at-score-moderate:    #fbbf24;
+  --at-score-weak:        #f97316;
+  --at-score-low:         #ef4444;
+
+  /* --- Typography --- */
+  --at-text-primary:      #f1f5f9;
+  --at-text-secondary:    #94a3b8;
+  --at-text-muted:        #64748b;
+  --at-text-accent:       #a5b4fc;
+
+  --at-font-sans:         'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --at-font-mono:         'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* --- Spacing --- */
+  --at-radius-sm:         6px;
+  --at-radius:            10px;
+  --at-radius-md:         14px;
+  --at-radius-lg:         20px;
+  --at-radius-xl:         28px;
+  --at-radius-full:       9999px;
+
+  /* --- Shadows --- */
+  --at-shadow-sm:         0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --at-shadow:            0 4px 16px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  --at-shadow-lg:         0 10px 40px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4);
+  --at-shadow-glow:       0 0 24px rgba(99, 102, 241, 0.25);
+  --at-shadow-glow-cyan:  0 0 24px rgba(34, 211, 238, 0.2);
+  --at-shadow-glow-green: 0 0 24px rgba(34, 197, 94, 0.25);
+
+  /* --- Gradients --- */
+  --at-gradient-primary:  linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --at-gradient-brand:    linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
+  --at-gradient-hero:     linear-gradient(160deg, #080d1a 0%, #0d1526 40%, #111827 100%);
+  --at-gradient-card:     linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(168,85,247,0.05) 100%);
+  --at-gradient-success:  linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  --at-gradient-score:    linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
+
+  /* --- Transitions --- */
+  --at-transition-fast:   0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --at-transition:        0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --at-transition-slow:   0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- Z-index --- */
+  --at-z-base:            1;
+  --at-z-card:            10;
+  --at-z-dropdown:        100;
+  --at-z-navbar:          1000;
+  --at-z-modal:           2000;
+  --at-z-toast:           3000;
+}
