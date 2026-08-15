@@ -8,6 +8,11 @@
 .env.production
 .env.*.local
 
+# Allow safe environment templates
+!.env.example
+!client/.env.example
+!server/.env.example
+
 # Dependencies
 node_modules/
 client/node_modules/
