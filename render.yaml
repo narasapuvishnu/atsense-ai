@@ -18,7 +18,7 @@ services:
       - key: PORT
         value: 10000
       - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: TOP_K
         value: '5'
       - key: GROQ_API_KEY
