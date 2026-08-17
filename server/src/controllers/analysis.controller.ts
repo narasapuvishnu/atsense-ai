@@ -124,12 +124,17 @@ async function runAnalysisPipeline(
     topK
   );
 
+  // Fetch the actual resume text from Qdrant so the LLM's ATS-readability check
+  // runs against the real resume (not the job description).
+  console.log('[Analysis] Step 2b: Fetching resume text for ATS readability check...');
+  const resumeText = await qdrantService.getDocumentText(resumeId);
+
   // Step 3: Groq LLM evaluation
   console.log('[Analysis] Step 3: Calling Groq LLM...');
   let analysisResult = await groqService.evaluateResumeMatch(
     jobDescription,
     ragResult,
-    jobDescriptionText
+    resumeText
   );
 
   // Step 4: Validate and normalize category scores

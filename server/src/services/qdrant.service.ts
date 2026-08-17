@@ -140,6 +140,10 @@ export class QdrantService {
     const results = await this.client.query(COLLECTION_NAME, {
       query: queryEmbedding,
       limit: topK,
+      // Qdrant's query API does NOT return point payloads by default — without
+      // this, every search result comes back with scores but empty text/section,
+      // and the LLM correctly scores 0 because it sees no resume evidence.
+      with_payload: true,
       filter: {
         must: [
           {
@@ -195,6 +199,39 @@ export class QdrantService {
     });
 
     return result.count;
+  }
+
+  async getDocumentText(documentId: string): Promise<string> {
+    await this.ensureCollection();
+
+    // Scroll every chunk for this document (payload included) and rebuild the
+    // resume text in chunk order so the LLM can run its ATS-readability check
+    // against the real resume rather than the job description.
+    const scrollResult = await this.client.scroll(COLLECTION_NAME, {
+      limit: 1000,
+      with_payload: true,
+      with_vector: false,
+      filter: {
+        must: [
+          {
+            key: 'documentId',
+            match: { value: documentId },
+          },
+        ],
+      },
+    });
+
+    const texts = scrollResult.points
+      .slice()
+      .sort((a, b) => {
+        const ia = (a.payload as unknown as ResumePoint | null)?.chunkIndex ?? 0;
+        const ib = (b.payload as unknown as ResumePoint | null)?.chunkIndex ?? 0;
+        return ia - ib;
+      })
+      .map((r) => (r.payload as unknown as ResumePoint | null)?.text ?? '')
+      .filter((t) => t.trim().length > 0);
+
+    return texts.join('\n\n');
   }
 
   private generatePointId(documentId: string, chunkIndex: number): number {

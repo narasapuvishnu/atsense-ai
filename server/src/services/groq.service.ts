@@ -157,15 +157,6 @@ Using ONLY the evidence above, evaluate the resume match and return this exact J
     "matched": ["<keywords found in evidence>"],
     "missing": ["<important JD keywords NOT in evidence>"],
     "suggested": ["<additional keywords that could strengthen the resume, ONLY if evidence supports them>"]
-  },
-  "ragInsights": {
-    "totalChunksIndexed": <number>,
-    "chunksRetrieved": <number>,
-    "topSimilarity": <number>,
-    "averageSimilarity": <number>,
-    "embeddingModel": "all-MiniLM-L6-v2",
-    "vectorDatabase": "Qdrant",
-    "topK": <number>
   }
 }
 
