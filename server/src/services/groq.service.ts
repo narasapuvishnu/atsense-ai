@@ -7,6 +7,21 @@ export class GroqService {
   private client: Groq;
   private model: string;
 
+  // Groq's free tier caps openai/gpt-oss-120b at 8,000 tokens/minute (TPM).
+  // If a single request exceeds that budget, Groq rejects it with HTTP 413
+  // "Request too large ... on tokens per minute". The evaluation prompt must
+  // therefore stay well under the limit (~4 chars ≈ 1 token for plain text).
+  private static readonly CHARS_PER_TOKEN = 4;
+
+  // Progressive input-prompt budgets (in tokens). If Groq rejects the largest
+  // prompt, we retry with smaller evidence contexts so the analysis can still
+  // complete on the free tier.
+  private static readonly PROMPT_TOKEN_BUDGETS = [3200, 2400, 1600];
+
+  // Output tokens count toward the same combined TPM cap on some accounts, so
+  // keep max_tokens modest too.
+  private static readonly MAX_OUTPUT_TOKENS = 3072;
+
   constructor() {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
@@ -22,43 +37,62 @@ export class GroqService {
     ragResult: RAGResult,
     resumeText: string
   ): Promise<AnalysisResult> {
-    const evidenceContext = this.buildEvidenceContext(ragResult);
-    const prompt = this.buildEvaluationPrompt(jobDescription, evidenceContext, resumeText);
+    // Try progressively smaller prompt budgets if Groq rejects the request as
+    // too large (HTTP 413 rate_limit_exceeded), which is common on the free tier.
+    for (let i = 0; i < GroqService.PROMPT_TOKEN_BUDGETS.length; i++) {
+      const tokenBudget = GroqService.PROMPT_TOKEN_BUDGETS[i];
 
-    console.log(`[Groq] Sending evaluation request to ${this.model}...`);
+      try {
+        const prompt = this.buildBudgetedPrompt(jobDescription, ragResult, resumeText, tokenBudget);
+        const estimatedTokens = Math.ceil(prompt.length / GroqService.CHARS_PER_TOKEN);
+        console.log(
+          `[Groq] Sending evaluation request to ${this.model} (` +
+            `${estimatedTokens} tokens, budget ${tokenBudget})...`
+        );
 
-    try {
-      const completion = await this.client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: this.getSystemPrompt(),
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 4096,
-        response_format: { type: 'json_object' },
-      });
+        const completion = await this.client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: this.getSystemPrompt(),
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: GroqService.MAX_OUTPUT_TOKENS,
+          response_format: { type: 'json_object' },
+        });
 
-      const raw = completion.choices[0]?.message?.content;
-      if (!raw) {
-        throw new Error('Empty response from Groq API');
+        const raw = completion.choices[0]?.message?.content;
+        if (!raw) {
+          throw new Error('Empty response from Groq API');
+        }
+
+        console.log('[Groq] Received response, parsing JSON...');
+        return this.parseAndValidateResponse(raw, ragResult, jobDescription);
+      } catch (err: unknown) {
+        // If Groq rejected the request because it was too large, shrink the
+        // prompt and try the next (smaller) budget before giving up.
+        if (this.isRequestTooLarge(err) && i < GroqService.PROMPT_TOKEN_BUDGETS.length - 1) {
+          const nextBudget = GroqService.PROMPT_TOKEN_BUDGETS[i + 1];
+          console.warn(`[Groq] Request too large (or TPM rate limited); retrying with ${nextBudget}-token budget...`);
+          continue;
+        }
+
+        console.error('[Groq] Error calling API:', err);
+        if (err instanceof Error) {
+          throw new Error(`Groq API error: ${err.message}`);
+        }
+        throw new Error('Unknown error from Groq API');
       }
-
-      console.log(`[Groq] Received response, parsing JSON...`);
-      return this.parseAndValidateResponse(raw, ragResult, jobDescription);
-    } catch (err: unknown) {
-      console.error('[Groq] Error calling API:', err);
-      if (err instanceof Error) {
-        throw new Error(`Groq API error: ${err.message}`);
-      }
-      throw new Error('Unknown error from Groq API');
     }
+
+    // The loop always returns or throws; this keeps TypeScript happy.
+    throw new Error('Groq API request failed after exhausting prompt budgets');
   }
 
   private getSystemPrompt(): string {
@@ -96,7 +130,9 @@ MATCH LEVELS:
     evidenceContext: string,
     resumeText: string
   ): string {
-    const resumeSnippet = resumeText.slice(0, 500);
+    // Tiny banner of the resume for the ATS-readability check only. It is
+    // collapsed onto one line and hard-capped to keep the request small.
+    const resumeSnippet = resumeText.trim().replace(/\s+/g, ' ').slice(0, 250);
 
     return `Evaluate this resume against the job description using the RAG-retrieved evidence below.
 
@@ -163,19 +199,82 @@ Using ONLY the evidence above, evaluate the resume match and return this exact J
 IMPORTANT: The overallScore MUST equal the sum of categoryScores. Return only valid JSON.`;
   }
 
-  private buildEvidenceContext(ragResult: RAGResult): string {
-    const lines = ['=== RAG-RETRIEVED RESUME EVIDENCE ===\n'];
+  /**
+   * Serializes the RAG evidence into a bounded text block. The number of
+   * requirements, chunks per requirement, and per-chunk length are capped so
+   * the assembled prompt stays inside Groq's free-tier TPM limit.
+   */
+  private buildEvidenceContext(ragResult: RAGResult, charBudget: number): string {
+    const MAX_EVIDENCE = 8;
+    const CHUNKS_PER_REQ = 2;
+    const CHUNK_CHAR_LIMIT = 200;
 
-    for (const ev of ragResult.evidence.slice(0, 10)) {
-      lines.push(`\n[Requirement: "${ev.requirement}" | Type: ${ev.requirementType}]`);
+    const lines: string[] = ['=== RAG-RETRIEVED RESUME EVIDENCE ==='];
+    let charCount = lines[0].length;
 
-      for (const chunk of ev.retrievedChunks.slice(0, 3)) {
-        lines.push(`  Evidence [Section: ${chunk.section}, Similarity: ${chunk.similarity.toFixed(3)}]:`);
-        lines.push(`  "${chunk.text.slice(0, 350)}"`);
+    for (const ev of ragResult.evidence.slice(0, MAX_EVIDENCE)) {
+      if (charCount >= charBudget) break;
+
+      const header = `[Requirement: "${ev.requirement}" | Type: ${ev.requirementType}]`;
+      lines.push(`\n${header}`);
+      charCount += header.length;
+
+      for (const chunk of ev.retrievedChunks.slice(0, CHUNKS_PER_REQ)) {
+        if (charCount >= charBudget) break;
+
+        const snippet = chunk.text.replace(/\s+/g, ' ').trim().slice(0, CHUNK_CHAR_LIMIT);
+        const line = `  Evidence [Section: ${chunk.section}, Similarity: ${chunk.similarity.toFixed(3)}]: "${snippet}"`;
+        lines.push(line);
+        charCount += line.length;
       }
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Builds the full user prompt while keeping the input within a hard token
+   * budget. The RAG evidence section is the least critical part, so it gets
+   * whatever char allowance the static parts of the prompt leave over.
+   */
+  private buildBudgetedPrompt(
+    jd: ParsedJobDescription,
+    ragResult: RAGResult,
+    resumeText: string,
+    tokenBudget: number
+  ): string {
+    const targetChars = tokenBudget * GroqService.CHARS_PER_TOKEN;
+
+    // Compute the static cost of the skeleton (JD summary + resume snippet +
+    // JSON schema) so the evidence only fills the remaining space.
+    const skeleton = this.buildEvaluationPrompt(jd, '', resumeText);
+    const evidenceCharBudget = Math.max(800, Math.floor((targetChars - skeleton.length) * 0.9));
+
+    const evidenceContext = this.buildEvidenceContext(ragResult, evidenceCharBudget);
+
+    // Final safety net: if the reconstructed prompt still exceeds the budget,
+    // rebuild the evidence with exactly the remaining allowance.
+    if (this.buildEvaluationPrompt(jd, evidenceContext, resumeText).length > targetChars) {
+      console.warn(`[Groq] Prompt exceeded budget; trimming RAG evidence to ${targetChars} chars.`);
+      const trimmedContext = this.buildEvidenceContext(ragResult, Math.max(800, targetChars - skeleton.length));
+      return this.buildEvaluationPrompt(jd, trimmedContext, resumeText);
+    }
+
+    return this.buildEvaluationPrompt(jd, evidenceContext, resumeText);
+  }
+
+  /**
+   * Detects Groq's "Request too large" rejection (HTTP 413 rate_limit_exceeded),
+   * which happens when a single request exceeds the model's TPM rate limit.
+   */
+  private isRequestTooLarge(err: unknown): boolean {
+    if (err && typeof err === 'object') {
+      const maybeErr = err as { status?: unknown; message?: string };
+      if (maybeErr.status === 413) return true;
+      const message = typeof maybeErr.message === 'string' ? maybeErr.message : '';
+      return /request too large|rate_limit_exceeded|tokens? per minute|TPM/i.test(message);
+    }
+    return false;
   }
 
   private parseAndValidateResponse(

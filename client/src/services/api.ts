@@ -15,12 +15,29 @@ const client = axios.create({
 });
 
 // --- Error normalizer ---
+const extractServerMessage = (data: unknown): string | null => {
+  if (data && typeof data === 'object') {
+    const d = data as { error?: unknown; message?: unknown };
+    if (typeof d.error === 'string' && d.error.trim()) return d.error;
+    if (typeof d.message === 'string' && d.message.trim()) return d.message;
+  }
+  return null;
+};
+
 const normalizeError = (err: unknown): string => {
   if (err instanceof AxiosError) {
-    const serverMsg = err.response?.data?.error || err.response?.data?.message;
+    const serverMsg = err.response ? extractServerMessage(err.response.data) : null;
     if (serverMsg) return serverMsg;
     if (err.code === 'ECONNABORTED') return 'Request timed out. Please try again.';
     if (err.code === 'ERR_NETWORK') return 'Cannot reach the server. Make sure the backend is running.';
+
+    // A 5xx without a JSON body usually means the server is unavailable or
+    // crashed mid-request (e.g. the dev proxy returned an HTML error page).
+    // Give the user an actionable hint instead of the cryptic axios default.
+    const status = err.response?.status;
+    if (status && status >= 500) {
+      return `The server returned an error (HTTP ${status}). It may be restarting, overloaded, or unavailable. Check the backend console for details and try again.`;
+    }
     return err.message;
   }
   if (err instanceof Error) return err.message;

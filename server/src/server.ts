@@ -10,6 +10,21 @@ import { healthRouter } from './routes/health.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
+// ── Process-level crash guards ───────────────────────────────────────────────
+// Node 15+ treats an unhandled promise rejection as a fatal error and exits the
+// whole process. When the backend dies mid-request, the dev proxy / reverse
+// proxy (e.g. Vite, Render) responds with a 500 that has a NON-JSON body, and the
+// client shows the cryptic "Request failed with status code 500". These handlers
+// log the actual error loudly and keep the server alive so one bad request never
+// takes the whole API down (recovery is via Render's healthcheck when deployed).
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled promise rejection (server kept alive):', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught exception (server kept alive):', err);
+});
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
