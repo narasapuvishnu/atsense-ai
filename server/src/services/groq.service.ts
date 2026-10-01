@@ -62,7 +62,7 @@ export class GroqService {
               content: prompt,
             },
           ],
-          temperature: 0.1,
+          temperature: 0,
           max_tokens: GroqService.MAX_OUTPUT_TOKENS,
           response_format: { type: 'json_object' },
         });
@@ -106,6 +106,17 @@ CRITICAL RULES:
 3. Never claim the candidate has a skill not present in the evidence.
 4. Provide honest, evidence-based scoring.
 5. Return ONLY valid JSON matching the specified schema.
+6. IMPORTANT — Distinguish between ACTUAL JOB REQUIREMENTS and ELIGIBILITY/ADMINISTRATIVE CRITERIA:
+   - "Required Skills" means technical skills the candidate must possess (e.g., Java, Python, SDLC).
+   - Eligibility criteria like degree branch names (CSE, AIML, IOT, CSBS, etc.), graduating batch year,
+     minimum CGPA, "no active backlogs", work locations, and communication skills are NOT technical
+     skill requirements. Do NOT list them as missing skills. Do NOT penalize the candidate for them.
+   - "Preferred skills" (marked with words like "preferably") should be weighted lower than required skills.
+7. Recognize equivalent terms: "SDLC" = "Software Development Life Cycle",
+   "OOP" = "Object-Oriented Programming", "DSA" = "Data Structures and Algorithms".
+   If the resume uses an abbreviation that matches a JD requirement (or vice versa), count it as a match.
+8. Focus scoring on the ACTUAL technical requirements, responsibilities, and experience requirements
+   explicitly stated in the job description — not company boilerplate or eligibility filters.
 
 SCORING WEIGHTS:
 - Required Skills: 30 points maximum
@@ -166,7 +177,7 @@ Using ONLY the evidence above, evaluate the resume match and return this exact J
     "atsReadability": <0-5>
   },
   "matchedSkills": ["<skills clearly found in evidence>"],
-  "missingSkills": ["<required skills NOT found in evidence>"],
+  "missingSkills": ["<ONLY actual required technical skills NOT found in evidence — do NOT include eligibility criteria, branch names, or administrative requirements>"],
   "strengths": ["<evidence-based strengths, max 5>"],
   "weaknesses": ["<evidence-based gaps, max 5>"],
   "recommendations": ["<specific, actionable improvement tips, max 6>"],
@@ -196,7 +207,11 @@ Using ONLY the evidence above, evaluate the resume match and return this exact J
   }
 }
 
-IMPORTANT: The overallScore MUST equal the sum of categoryScores. Return only valid JSON.`;
+IMPORTANT:
+- The overallScore MUST equal the sum of categoryScores.
+- Treat abbreviations as equivalent (SDLC = Software Development Life Cycle, OOP = Object-Oriented Programming).
+- Do NOT list eligibility branch names (CSE, AIML, IOT, CSBS, Cloud Computing as a branch name, etc.) as missing skills.
+- Return only valid JSON.`;
   }
 
   /**
